@@ -1,0 +1,4 @@
+common:
+  sidebar:
+    reorder: 'Reorder items'
+    finishSorting: 'Done sorting'

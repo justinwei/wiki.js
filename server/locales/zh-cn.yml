@@ -1,0 +1,4 @@
+common:
+  sidebar:
+    reorder: '拖拽排序'
+    finishSorting: '完成排序'

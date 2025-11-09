@@ -161,7 +161,9 @@ module.exports = {
             locale: page.localeCode,
             editor: page.editorKey,
             scriptJs: page.extra.js,
-            scriptCss: page.extra.css
+            scriptCss: page.extra.css,
+            isPrivate: page.isPrivate === 1 || page.isPrivate === true,
+            isPublished: page.isPublished === 1 || page.isPublished === true
           }
         } else {
           throw new WIKI.Error.PageViewForbidden()
@@ -185,7 +187,9 @@ module.exports = {
             locale: page.localeCode,
             editor: page.editorKey,
             scriptJs: page.extra.js,
-            scriptCss: page.extra.css
+            scriptCss: page.extra.css,
+            isPrivate: page.isPrivate === 1 || page.isPrivate === true,
+            isPublished: page.isPublished === 1 || page.isPublished === true
           }
         } else {
           throw new WIKI.Error.PageViewForbidden()
@@ -512,6 +516,40 @@ module.exports = {
         })
         return {
           responseResult: graphHelper.generateSuccess('Page has been deleted.')
+        }
+      } catch (err) {
+        return graphHelper.generateError(err)
+      }
+    },
+    /**
+     * DELETE FOLDER AND ALL PAGES INSIDE
+     */
+    async deleteFolder(obj, args, context) {
+      try {
+        // Find all pages under this path
+        const pagesToDelete = await WIKI.models.pages.query()
+          .where('localeCode', args.locale)
+          .where('path', 'like', `${args.path}/%`)
+        
+        if (pagesToDelete.length === 0) {
+          throw new Error('No pages found in this folder.')
+        }
+        
+        // Delete all pages
+        let deletedCount = 0
+        for (const page of pagesToDelete) {
+          await WIKI.models.pages.deletePage({
+            id: page.id,
+            user: context.req.user
+          })
+          deletedCount++
+        }
+        
+        // Rebuild page tree
+        await WIKI.models.pages.rebuildTree()
+        
+        return {
+          responseResult: graphHelper.generateSuccess(`Deleted ${deletedCount} pages from folder.`)
         }
       } catch (err) {
         return graphHelper.generateError(err)

@@ -235,15 +235,25 @@ import cmFold from './common/cmFold'
 const CtrlKey = /Mac/.test(navigator.platform) ? 'Cmd' : 'Ctrl'
 
 // Prism Config
-Prism.plugins.autoloader.languages_path = '/_assets/js/prism/'
-Prism.plugins.NormalizeWhitespace.setDefaults({
-  'remove-trailing': true,
-  'remove-indent': true,
-  'left-trim': true,
-  'right-trim': true,
-  'remove-initial-line-feed': true,
-  'tabs-to-spaces': 2
-})
+// Guard Prism plugin usage in case plugin modules are not loaded yet (HMR/dev timing)
+if (typeof Prism !== 'undefined' && Prism && Prism.plugins) {
+  if (Prism.plugins.autoloader) {
+    try { Prism.plugins.autoloader.languages_path = '/_assets/js/prism/' } catch (e) { /* ignore */ }
+  }
+
+  if (Prism.plugins.NormalizeWhitespace && typeof Prism.plugins.NormalizeWhitespace.setDefaults === 'function') {
+    try {
+      Prism.plugins.NormalizeWhitespace.setDefaults({
+        'remove-trailing': true,
+        'remove-indent': true,
+        'left-trim': true,
+        'right-trim': true,
+        'remove-initial-line-feed': true,
+        'tabs-to-spaces': 2
+      })
+    } catch (e) { /* ignore */ }
+  }
+}
 
 // Markdown Instance
 const md = new MarkdownIt({

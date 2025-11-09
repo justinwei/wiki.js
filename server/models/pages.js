@@ -1070,7 +1070,7 @@ module.exports = class Page extends Model {
       publishStartDate: page.publishStartDate,
       contentType: page.contentType,
       render: page.render,
-      tags: page.tags.map(t => _.pick(t, ['tag', 'title'])),
+      tags: (page.tags || []).map(t => _.pick(t, ['tag', 'title'])),
       title: page.title,
       toc: _.isString(page.toc) ? page.toc : JSON.stringify(page.toc),
       updatedAt: page.updatedAt

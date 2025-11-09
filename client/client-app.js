@@ -19,6 +19,7 @@ import moment from 'moment-timezone'
 import VueMoment from 'vue-moment'
 import store from './store'
 import Cookies from 'js-cookie'
+import { Buffer } from 'buffer'
 
 // ====================================
 // Load Modules
@@ -40,6 +41,8 @@ import helpers from './helpers'
 window.WIKI = null
 window.boot = boot
 window.Hammer = Hammer
+window.Buffer = window.Buffer || Buffer
+window.Buffer = Buffer
 
 moment.locale(siteConfig.lang)
 

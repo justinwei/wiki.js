@@ -138,6 +138,11 @@ type PageMutation {
     id: Int!
   ): DefaultResponse @auth(requires: ["delete:pages", "manage:system"])
 
+  deleteFolder(
+    path: String!
+    locale: String!
+  ): DefaultResponse @auth(requires: ["delete:pages", "manage:system"])
+
   deleteTag(
     id: Int!
   ): DefaultResponse @auth(requires: ["manage:system"])

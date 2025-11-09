@@ -160,7 +160,7 @@ router.get(['/e', '/e/*'], async (req, res, next) => {
     _.set(res.locals, 'pageMeta.title', `Edit ${page.title}`)
     _.set(res.locals, 'pageMeta.description', page.description)
     page.mode = 'update'
-    page.isPublished = (page.isPublished === true || page.isPublished === 1) ? 'true' : 'false'
+    page.isPublished = (page.isPublished === true || page.isPublished === 1)
     page.content = Buffer.from(page.content).toString('base64')
   } else {
     // -> CREATE MODE
@@ -547,6 +547,9 @@ router.get('/*', async (req, res, next) => {
           // -> Page Filename (for edit on external repo button)
           let pageFilename = WIKI.config.lang.namespacing ? `${pageArgs.locale}/${page.path}` : page.path
           pageFilename += page.contentType === 'markdown' ? '.md' : '.html'
+
+          // -> Convert isPublished to boolean
+          page.isPublished = (page.isPublished === true || page.isPublished === 1)
 
           // -> Render view
           res.render('page', {

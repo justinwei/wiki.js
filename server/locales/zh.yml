@@ -2,3 +2,17 @@ common:
   sidebar:
     reorder: '拖拽排序'
     finishSorting: '完成排序'
+  import:
+    title: '导入文件'
+    description: '支持导入单个 Markdown 文件 (.md) 或包含多个 Markdown 文件的 ZIP 压缩包'
+    selectFile: '选择文件'
+    targetPath: '目标路径'
+    targetPathHint: '留空则导入到当前目录'
+    start: '开始导入'
+    importing: '正在导入...'
+    completed: '导入完成'
+    created: '新建'
+    updated: '更新'
+    failed: '失败'
+    errors: '错误详情'
+    noFileSelected: '请选择要导入的文件'

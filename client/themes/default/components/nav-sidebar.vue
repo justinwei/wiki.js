@@ -57,9 +57,26 @@
           v-list-item-title {{ currentParent.title }}
       v-subheader.pl-4.d-flex.align-center.justify-space-between
         span {{$t('common:sidebar.currentDirectory')}}
-        div.d-flex.align-center(v-if='showSortControls')
+        div.d-flex.align-center(v-if='showSortControls || canReorder')
+          v-btn(
+            v-if='canReorder && !isSorting'
+            icon
+            x-small
+            :title='$t("common:import.title")'
+            @click='openImportDialog'
+          )
+            v-icon mdi-file-import
+          v-btn(
+            v-if='!isSorting'
+            icon
+            x-small
+            title='刷新页面树'
+            @click='refreshBrowseTree'
+          )
+            v-icon mdi-refresh
           v-progress-circular.mr-2(v-if='sortLoading', indeterminate, color='primary', size='14', width='2')
           v-btn(
+            v-if='showSortControls'
             icon
             x-small
             :class='isSorting ? `primary--text` : ``'
@@ -92,6 +109,14 @@
             v-list-item-title {{ element.title }}
             v-list-item-action(v-if='isSorting && canReorder')
               v-icon.nav-sidebar__handle mdi-drag
+            v-list-item-action(v-if='!isSorting && element.isFolder && canReorder')
+              v-btn(
+                icon
+                x-small
+                @click.stop='deleteFolder(element)'
+                :title='$t("common:actions.delete")'
+              )
+                v-icon(small, color='error') mdi-delete
 </template>
 
 <script>
@@ -106,6 +131,19 @@ const reorderTreeMutation = gql`
   mutation ($parent: Int, $order: [Int!]!, $locale: String!) {
     pages {
       reorderTree(parent: $parent, order: $order, locale: $locale) {
+        responseResult {
+          succeeded
+          message
+        }
+      }
+    }
+  }
+`
+
+const deleteFolderMutation = gql`
+  mutation ($path: String!, $locale: String!) {
+    pages {
+      deleteFolder(path: $path, locale: $locale) {
         responseResult {
           succeeded
           message
@@ -187,7 +225,13 @@ export default {
   },
   watch: {
     locale (newLocale, oldLocale) {
+      // 避免页面加载时不必要的刷新
+      // 只在 locale 真正改变时才刷新
       if (!newLocale || newLocale === oldLocale) {
+        return
+      }
+      // 如果当前父节点的 locale 已经是新的 locale，不需要刷新
+      if (this.currentParent.locale === newLocale) {
         return
       }
       if (this.currentMode !== 'browse') {
@@ -213,8 +257,10 @@ export default {
         this.fetchBrowseItems(this.currentParent)
       }
     },
-    async fetchBrowseItems (item) {
-      this.isSorting = false
+    async fetchBrowseItems (item, forceRefresh = false, keepSortingMode = false) {
+      if (!keepSortingMode) {
+        this.isSorting = false
+      }
       this.$store.commit(`loadingStart`, 'browse-load')
       if (!item) {
         item = this.currentParent
@@ -238,6 +284,9 @@ export default {
       }
 
       this.currentParent = item
+      
+      // 保存当前导航状态到 localStorage
+      this.saveNavigationState()
 
       const resp = await this.$apollo.query({
         query: gql`
@@ -255,7 +304,7 @@ export default {
             }
           }
         `,
-        fetchPolicy: 'cache-first',
+        fetchPolicy: forceRefresh ? 'network-only' : 'cache-first',
         variables: {
           parent: item.id,
           locale: this.activeLocale
@@ -310,7 +359,7 @@ export default {
           style: 'success',
           icon: 'check'
         })
-        await this.fetchBrowseItems(this.currentParent)
+        await this.fetchBrowseItems(this.currentParent, true, true)
       } catch (err) {
         console.error(err)
         this.$store.commit('showNotification', {
@@ -318,7 +367,7 @@ export default {
           style: 'red',
           icon: 'alert'
         })
-        await this.fetchBrowseItems()
+        await this.fetchBrowseItems(this.currentParent, true, true)
       } finally {
         this.sortLoading = false
       }
@@ -337,6 +386,114 @@ export default {
     },
     goHome () {
       window.location.assign(siteLangs.length > 0 ? `/${this.activeLocale}/home` : '/')
+    },
+    openImportDialog () {
+      this.$root.$emit('openImportDialog', {
+        currentPath: this.currentParent && this.currentParent.id > 0 ? this.currentParent.path : '',
+        locale: this.activeLocale,
+        parentId: this.currentParent ? this.currentParent.id : 0
+      })
+    },
+    refreshBrowseTree () {
+      // Force refresh the current view
+      this.fetchBrowseItems(this.currentParent, true)
+    },
+    async deleteFolder (folder) {
+      const confirmed = confirm(
+        `确定要删除文件夹 "${folder.title}" 及其下的所有页面吗？此操作不可恢复。`
+      )
+      
+      if (!confirmed) {
+        return
+      }
+      
+      this.sortLoading = true
+      try {
+        const resp = await this.$apollo.mutate({
+          mutation: deleteFolderMutation,
+          variables: {
+            path: folder.path,
+            locale: folder.locale || this.activeLocale
+          }
+        })
+        
+        if (resp.data.pages.deleteFolder.responseResult.succeeded) {
+          this.$store.commit('showNotification', {
+            message: resp.data.pages.deleteFolder.responseResult.message || '文件夹已删除',
+            style: 'success',
+            icon: 'check'
+          })
+          
+          // Refresh the current view
+          this.fetchBrowseItems(this.currentParent, true)
+        } else {
+          throw new Error(resp.data.pages.deleteFolder.responseResult.message)
+        }
+      } catch (err) {
+        console.error(err)
+        this.$store.commit('showNotification', {
+          message: `删除失败: ${err.message}`,
+          style: 'error',
+          icon: 'alert'
+        })
+      } finally {
+        this.sortLoading = false
+      }
+    },
+    saveNavigationState () {
+      // 保存当前导航树的展开状态
+      try {
+        const state = {
+          currentParentId: this.currentParent.id,
+          currentParentPath: this.currentParent.path,
+          currentParentTitle: this.currentParent.title,
+          parents: this.parents.map(p => ({
+            id: p.id,
+            path: p.path,
+            title: p.title,
+            locale: p.locale
+          })),
+          locale: this.activeLocale
+        }
+        window.localStorage.setItem('navTreeState', JSON.stringify(state))
+      } catch (err) {
+        console.warn('Failed to save navigation state:', err)
+      }
+    },
+    restoreNavigationState () {
+      // 恢复之前保存的导航树状态
+      try {
+        const stateStr = window.localStorage.getItem('navTreeState')
+        if (!stateStr) {
+          return false
+        }
+        
+        const state = JSON.parse(stateStr)
+        
+        // 只在 locale 匹配时恢复状态
+        if (state.locale !== this.activeLocale) {
+          return false
+        }
+        
+        // 恢复 currentParent 和 parents
+        if (state.currentParentId !== undefined) {
+          this.currentParent = {
+            id: state.currentParentId,
+            path: state.currentParentPath,
+            title: state.currentParentTitle,
+            locale: state.locale
+          }
+          
+          if (state.parents && state.parents.length > 0) {
+            this.parents = state.parents
+          }
+          
+          return true
+        }
+      } catch (err) {
+        console.warn('Failed to restore navigation state:', err)
+      }
+      return false
     }
   },
   mounted () {
@@ -352,7 +509,15 @@ export default {
     }
     if (this.currentMode === 'browse') {
       if (this.locale) {
-        this.fetchBrowseItems(this.currentParent)
+        // 尝试恢复之前保存的导航状态
+        const restored = this.restoreNavigationState()
+        if (restored) {
+          // 如果成功恢复状态，加载恢复的目录内容
+          this.fetchBrowseItems(this.currentParent)
+        } else {
+          // 否则加载根目录
+          this.fetchBrowseItems(this.currentParent)
+        }
       }
     }
   }

@@ -337,6 +337,12 @@
     nav-footer
     notify
     search-results
+    import-dialog(
+      v-model='importDialogShown'
+      :current-path='path'
+      :current-locale='locale'
+      :parent-id='pageId'
+    )
     v-fab-transition
       v-btn(
         v-if='upBtnShown'
@@ -360,6 +366,7 @@
 import { StatusIndicator } from 'vue-status-indicator'
 import Tabset from './tabset.vue'
 import NavSidebar from './nav-sidebar.vue'
+import ImportDialog from './import-dialog.vue'
 import Prism from 'prismjs'
 import mermaid from 'mermaid'
 import { get, sync } from 'vuex-pathify'
@@ -369,16 +376,27 @@ import Vue from 'vue'
 
 Vue.component('Tabset', Tabset)
 
-Prism.plugins.autoloader.languages_path = '/_assets/js/prism/'
-Prism.plugins.NormalizeWhitespace.setDefaults({
-  'remove-trailing': true,
-  'remove-indent': true,
-  'left-trim': true,
-  'right-trim': true,
-  'remove-initial-line-feed': true,
-  'tabs-to-spaces': 2
-})
-Prism.plugins.toolbar.registerButton('copy-to-clipboard', (env) => {
+// Guard Prism plugin usage in case plugin modules are not loaded yet (HMR/dev timing)
+if (typeof Prism !== 'undefined' && Prism && Prism.plugins) {
+  if (Prism.plugins.autoloader) {
+    try { Prism.plugins.autoloader.languages_path = '/_assets/js/prism/' } catch (e) { /* ignore */ }
+  }
+
+  if (Prism.plugins.NormalizeWhitespace && typeof Prism.plugins.NormalizeWhitespace.setDefaults === 'function') {
+    try {
+      Prism.plugins.NormalizeWhitespace.setDefaults({
+        'remove-trailing': true,
+        'remove-indent': true,
+        'left-trim': true,
+        'right-trim': true,
+        'remove-initial-line-feed': true,
+        'tabs-to-spaces': 2
+      })
+    } catch (e) { /* ignore */ }
+  }
+
+  if (Prism.plugins.toolbar && typeof Prism.plugins.toolbar.registerButton === 'function') {
+    Prism.plugins.toolbar.registerButton('copy-to-clipboard', (env) => {
   let linkCopy = document.createElement('button')
   linkCopy.textContent = 'Copy'
 
@@ -402,11 +420,14 @@ Prism.plugins.toolbar.registerButton('copy-to-clipboard', (env) => {
       linkCopy.textContent = 'Copy'
     }, 5000)
   }
-})
+    })
+  }
+}
 
 export default {
   components: {
     NavSidebar,
+    ImportDialog,
     StatusIndicator
   },
   props: {
@@ -497,6 +518,7 @@ export default {
       navExpanded: false,
       upBtnShown: false,
       pageEditFab: false,
+      importDialogShown: false,
       scrollOpts: {
         duration: 1500,
         offset: 0,
@@ -646,6 +668,14 @@ export default {
 
       window.boot.notify('page-ready')
     })
+    
+    // Handle import dialog
+    this.$root.$on('openImportDialog', (params) => {
+      this.importDialogShown = true
+    })
+    
+    // Removed reloadNavTree event listener to prevent unwanted page refreshes
+    // The sidebar will refresh automatically through GraphQL cache updates
   },
   methods: {
     goHome () {
@@ -704,6 +734,9 @@ export default {
         document.querySelector('#discussion-new').focus()
       }
     }
+  },
+  beforeDestroy() {
+    this.$root.$off('openImportDialog')
   }
 }
 </script>

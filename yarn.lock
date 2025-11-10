@@ -4837,6 +4837,11 @@ buffer@4.9.2:
     ieee754 "^1.1.4"
     isarray "^1.0.0"
 
+buildcheck@~0.0.6:
+  version "0.0.6"
+  resolved "https://mirrors.huaweicloud.com/repository/npm/buildcheck/-/buildcheck-0.0.6.tgz"
+  integrity sha512-8f9ZJCUXyT1M35Jx7MkBgmBMo3oHTTBIPLiY9xyL0pl3T5RwcPEY8cUHr5LBNfu/fk6c2T4DJZuVM/8ZZT2D2A==
+
 builtin-status-codes@^3.0.0:
   version "3.0.0"
   resolved "https://mirrors.huaweicloud.com/repository/npm/builtin-status-codes/-/builtin-status-codes-3.0.0.tgz"
@@ -6076,6 +6081,14 @@ cosmiconfig@^5.0.0:
     is-directory "^0.3.1"
     js-yaml "^3.13.1"
     parse-json "^4.0.0"
+
+cpu-features@~0.0.4:
+  version "0.0.10"
+  resolved "https://mirrors.huaweicloud.com/repository/npm/cpu-features/-/cpu-features-0.0.10.tgz"
+  integrity sha512-9IkYqtX3YHPCzoVg1Py+o9057a3i0fp7S530UWokCSaFVTc7CwXPRiOjRjBQQ18ZCNafx78YfnG+HALxtVmOGA==
+  dependencies:
+    buildcheck "~0.0.6"
+    nan "^2.19.0"
 
 create-ecdh@^4.0.4:
   version "4.0.4"
@@ -12823,7 +12836,7 @@ named-placeholders@^1.1.2:
   dependencies:
     lru-cache "^7.14.1"
 
-nan@^2.12.1, nan@^2.14.0, nan@^2.16.0:
+nan@^2.12.1, nan@^2.14.0, nan@^2.16.0, nan@^2.19.0:
   version "2.23.1"
   resolved "https://mirrors.huaweicloud.com/repository/npm/nan/-/nan-2.23.1.tgz"
   integrity sha512-r7bBUGKzlqk8oPBDYxt6Z0aEdF1G1rwlMcLk8LCOMbOzf0mG+JUfUzG4fIMWwHWP0iyaLWEQZJmtB7nOHEm/qw==

@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 数据库
+  db:
+    image: postgres:15-alpine
+    container_name: wikijs-db
+    environment:
+      POSTGRES_DB: wiki
+      POSTGRES_USER: wikijs
+      POSTGRES_PASSWORD: wikijsrocks  # 生产环境请修改此密码
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - wikijs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wikijs"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Wiki.js 应用
+  wiki:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wikijs-app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # 数据库配置
+      DB_TYPE: postgres
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: wikijs
+      DB_PASS: wikijsrocks  # 生产环境请修改此密码
+      DB_NAME: wiki
+      # 其他配置
+      WIKI_ADMIN_EMAIL: admin@example.com  # 请修改为你的邮箱
+    ports:
+      - "3000:3000"
+    volumes:
+      - wiki-data:/wiki/data
+      - ./config.yml:/wiki/config.yml:ro  # 挂载配置文件(只读)
+    networks:
+      - wikijs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  db-data:
+    driver: local
+  wiki-data:
+    driver: local
+
+networks:
+  wikijs:
+    driver: bridge

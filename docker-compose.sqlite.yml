@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  # Wiki.js 应用 (使用 SQLite)
+  wiki:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wikijs-app
+    environment:
+      # 使用 SQLite 数据库
+      DB_TYPE: sqlite
+      DB_FILEPATH: /wiki/data/database.sqlite
+      # 其他配置
+      WIKI_ADMIN_EMAIL: admin@example.com  # 请修改为你的邮箱
+    ports:
+      - "3000:3000"
+    volumes:
+      - wiki-data:/wiki/data
+      - ./config.yml:/wiki/config.yml:ro  # 挂载配置文件(只读)
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  wiki-data:
+    driver: local

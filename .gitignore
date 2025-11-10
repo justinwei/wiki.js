@@ -49,3 +49,7 @@ test-results/
 
 # Localization Resources
 /server/locales/**/*.yml
+
+# Docker
+.env
+*.env.local

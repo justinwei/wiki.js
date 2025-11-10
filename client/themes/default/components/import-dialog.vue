@@ -272,17 +272,6 @@ export default {
         if (!response.ok) {
           const errorText = await response.text()
           throw new Error(`HTTP ${response.status}: ${errorText}`)
-        } catch (err) {
-          console.error('Import failed:', err)
-          this.stopPolling()
-          this.importing = false
-          this.error = err.message
-          this.$store.commit('showNotification', {
-            message: `导入失败: ${err.message}`,
-            style: 'error',
-            icon: 'alert'
-          })
-          throw err
         }
         
         const result = await response.json()

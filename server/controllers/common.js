@@ -160,7 +160,7 @@ router.get(['/e', '/e/*'], async (req, res, next) => {
     _.set(res.locals, 'pageMeta.title', `Edit ${page.title}`)
     _.set(res.locals, 'pageMeta.description', page.description)
     page.mode = 'update'
-    page.isPublished = (page.isPublished === true || page.isPublished === 1)
+    page.isPublished = (page.isPublished === true || page.isPublished === 1) ? 'true' : 'false'
     page.content = Buffer.from(page.content).toString('base64')
   } else {
     // -> CREATE MODE

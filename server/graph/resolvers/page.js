@@ -395,6 +395,23 @@ module.exports = {
       } else {
         throw new WIKI.Error.PageNotFound()
       }
+    },
+    /**
+     * GET FOLDER PAGES FOR DELETION
+     */
+    async folderPages (obj, args, context, info) {
+      const pages = await WIKI.models.pages.query()
+        .column(['id', 'path', 'title'])
+        .where('localeCode', args.locale)
+        .where('path', 'like', `${args.path}/%`)
+        .orderBy('path', 'asc')
+      
+      return pages.map(p => ({
+        id: p.id,
+        path: p.path,
+        locale: args.locale,
+        title: p.title
+      }))
     }
   },
   PageMutation: {
@@ -550,6 +567,55 @@ module.exports = {
         
         return {
           responseResult: graphHelper.generateSuccess(`Deleted ${deletedCount} pages from folder.`)
+        }
+      } catch (err) {
+        return graphHelper.generateError(err)
+      }
+    },
+    /**
+     * RENAME FOLDER
+     */
+    async renameFolder(obj, args, context) {
+      try {
+        // Validate new title
+        if (!args.newTitle || args.newTitle.trim().length === 0) {
+          throw new Error('New folder title cannot be empty.')
+        }
+        
+        // Find all pages under this path
+        const pagesToUpdate = await WIKI.models.pages.query()
+          .where('localeCode', args.locale)
+          .where('path', 'like', `${args.path}/%`)
+        
+        if (pagesToUpdate.length === 0) {
+          throw new Error('No pages found in this folder.')
+        }
+        
+        // Update the tree structure with new title
+        const oldPathSegments = args.path.split('/')
+        const newPathSegments = [...oldPathSegments]
+        newPathSegments[newPathSegments.length - 1] = args.newTitle.trim()
+        const newPath = newPathSegments.join('/')
+        
+        // Update all pages under this folder
+        let updatedCount = 0
+        for (const page of pagesToUpdate) {
+          const relativePath = page.path.substring(args.path.length)
+          const newPagePath = newPath + relativePath
+          
+          await WIKI.models.pages.query()
+            .findById(page.id)
+            .patch({
+              path: newPagePath
+            })
+          updatedCount++
+        }
+        
+        // Rebuild page tree
+        await WIKI.models.pages.rebuildTree()
+        
+        return {
+          responseResult: graphHelper.generateSuccess(`Successfully renamed folder. Updated ${updatedCount} pages.`)
         }
       } catch (err) {
         return graphHelper.generateError(err)

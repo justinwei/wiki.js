@@ -77,6 +77,11 @@ type PageQuery {
   conflictLatest(
     id: Int!
   ): PageConflictLatest! @auth(requires: ["write:pages", "manage:pages", "manage:system"])
+
+  folderPages(
+    path: String!
+    locale: String!
+  ): [PageListItem!]! @auth(requires: ["delete:pages", "manage:system"])
 }
 
 # -----------------------------------------------
@@ -142,6 +147,12 @@ type PageMutation {
     path: String!
     locale: String!
   ): DefaultResponse @auth(requires: ["delete:pages", "manage:system"])
+
+  renameFolder(
+    path: String!
+    locale: String!
+    newTitle: String!
+  ): DefaultResponse @auth(requires: ["write:pages", "manage:pages", "manage:system"])
 
   deleteTag(
     id: Int!

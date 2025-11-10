@@ -442,22 +442,78 @@ export default {
     onCmInput: _.debounce(function (newContent) {
       this.processContent(newContent)
     }, 600),
-    onCmPaste (cm, ev) {
-      // const clipItems = (ev.clipboardData || ev.originalEvent.clipboardData).items
-      // for (let clipItem of clipItems) {
-      //   if (_.startsWith(clipItem.type, 'image/')) {
-      //     const file = clipItem.getAsFile()
-      //     const reader = new FileReader()
-      //     reader.onload = evt => {
-      //       this.$store.commit(`loadingStart`, 'editor-paste-image')
-      //       this.insertAfter({
-      //         content: `![${file.name}](${evt.target.result})`,
-      //         newLine: true
-      //       })
-      //     }
-      //     reader.readAsDataURL(file)
-      //   }
-      // }
+    async onCmPaste (cm, ev) {
+      const clipItems = (ev.clipboardData || ev.originalEvent.clipboardData).items
+      for (let clipItem of clipItems) {
+        if (_.startsWith(clipItem.type, 'image/')) {
+          ev.preventDefault()
+          
+          const file = clipItem.getAsFile()
+          if (!file) {
+            continue
+          }
+          
+          // Generate a unique filename
+          const timestamp = Date.now()
+          const extension = file.type.split('/')[1] || 'png'
+          const filename = `pasted-image-${timestamp}.${extension}`
+          
+          try {
+            this.$store.commit('loadingStart', 'editor-paste-image')
+            
+            // Create form data with file and metadata
+            const formData = new FormData()
+            const renamedFile = new File([file], filename, { type: file.type })
+            
+            // Add the file
+            formData.append('mediaUpload', renamedFile)
+            
+            // Add metadata as a separate field (not as file)
+            formData.append('mediaUpload', JSON.stringify({
+              folderId: 0
+            }))
+            
+            const response = await fetch('/u', {
+              method: 'POST',
+              body: formData,
+              credentials: 'include'
+            })
+            
+            if (!response.ok) {
+              const errorText = await response.text()
+              console.error('Upload error response:', errorText)
+              throw new Error(`Upload failed: ${response.status}`)
+            }
+            
+            // Server returns 'ok' on success
+            const result = await response.text()
+            
+            // Insert markdown image syntax at cursor position
+            // Use the sanitized filename for the path
+            const imagePath = `/${filename.toLowerCase().replace(/[\s,;#]+/g, '_')}`
+            
+            this.insertAfter({
+              content: `![${filename}](${imagePath})`,
+              newLine: true
+            })
+            
+            this.$store.commit('showNotification', {
+              message: '图片已成功粘贴并上传',
+              style: 'success',
+              icon: 'check'
+            })
+          } catch (err) {
+            console.error('Failed to upload pasted image:', err)
+            this.$store.commit('showNotification', {
+              message: `图片上传失败: ${err.message}`,
+              style: 'error',
+              icon: 'alert'
+            })
+          } finally {
+            this.$store.commit('loadingStop', 'editor-paste-image')
+          }
+        }
+      }
     },
     processContent (newContent) {
       linesMap = []

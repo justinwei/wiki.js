@@ -102,6 +102,7 @@
             :href='element.isFolder || (isSorting && canReorder) ? undefined : (`/` + element.locale + `/` + element.path)'
             :input-value='!element.isFolder && path === element.path'
             @click='element.isFolder ? onFolderClick(element) : onPageClick($event)'
+            :class='element.isFolder ? "nav-sidebar__folder-item" : ""'
           )
             v-list-item-avatar(size='24')
               v-icon(v-if='element.isFolder') mdi-folder
@@ -109,7 +110,15 @@
             v-list-item-title {{ element.title }}
             v-list-item-action(v-if='isSorting && canReorder')
               v-icon.nav-sidebar__handle mdi-drag
-            v-list-item-action(v-if='!isSorting && element.isFolder && canReorder')
+            v-list-item-action.nav-sidebar__folder-action(v-if='!isSorting && element.isFolder && canReorder')
+              v-btn(
+                icon
+                x-small
+                @click.stop='renameFolder(element)'
+                :title='$t("common:actions.rename")'
+              )
+                v-icon(small, color='primary') mdi-pencil
+            v-list-item-action.nav-sidebar__folder-action(v-if='!isSorting && element.isFolder && canReorder')
               v-btn(
                 icon
                 x-small
@@ -117,6 +126,48 @@
                 :title='$t("common:actions.delete")'
               )
                 v-icon(small, color='error') mdi-delete
+    
+    //-> Delete Folder Progress Dialog
+    v-dialog(
+      v-model='deleteFolderDialog.shown'
+      max-width='600'
+      persistent
+    )
+      v-card
+        v-toolbar(color='error', dark, dense, flat)
+          v-icon(left) mdi-delete
+          .body-2 删除文件夹
+        v-card-text.pt-5
+          v-alert(v-if='deleteFolderDialog.error', type='error', text, dismissible, @input='deleteFolderDialog.error = null')
+            | {{ deleteFolderDialog.error }}
+          
+          .text-center(v-if='deleteFolderDialog.deleting')
+            v-progress-circular(
+              :value='deleteFolderDialog.progress'
+              :size='100'
+              :width='10'
+              color='error'
+              rotate='270'
+            )
+              span.text-h6 {{ deleteFolderDialog.progress }}%
+            .mt-4.subtitle-1 正在删除文件夹 "{{ deleteFolderDialog.folderTitle }}"...
+            .caption.mt-2(v-if='deleteFolderDialog.currentFile') 当前删除：{{ deleteFolderDialog.currentFile }}
+            .caption.mt-1
+              | 已删除 {{ deleteFolderDialog.deletedCount }} / {{ deleteFolderDialog.totalCount }} 个文件
+          
+          v-alert(v-if='deleteFolderDialog.completed', type='success', text)
+            .subtitle-1 删除完成
+            .mt-2
+              div 已删除 {{ deleteFolderDialog.deletedCount }} 个文件
+              div(v-if='deleteFolderDialog.failedCount > 0', class='error--text') 失败 {{ deleteFolderDialog.failedCount }} 个
+        
+        v-card-actions
+          v-spacer
+          v-btn(
+            v-if='deleteFolderDialog.completed'
+            color='primary'
+            @click='closeDeletionDialog'
+          ) 关闭
 </template>
 
 <script>
@@ -144,6 +195,44 @@ const deleteFolderMutation = gql`
   mutation ($path: String!, $locale: String!) {
     pages {
       deleteFolder(path: $path, locale: $locale) {
+        responseResult {
+          succeeded
+          message
+        }
+      }
+    }
+  }
+`
+
+const renameFolderMutation = gql`
+  mutation ($path: String!, $locale: String!, $newTitle: String!) {
+    pages {
+      renameFolder(path: $path, locale: $locale, newTitle: $newTitle) {
+        responseResult {
+          succeeded
+          message
+        }
+      }
+    }
+  }
+`
+
+const getFolderPagesQuery = gql`
+  query ($path: String!, $locale: String!) {
+    pages {
+      folderPages(path: $path, locale: $locale) {
+        id
+        path
+        title
+      }
+    }
+  }
+`
+
+const deletePageMutation = gql`
+  mutation ($id: Int!) {
+    pages {
+      delete(id: $id) {
         responseResult {
           succeeded
           message
@@ -187,7 +276,21 @@ export default {
       parents: [],
       loadedCache: [],
       isSorting: false,
-      sortLoading: false
+      sortLoading: false,
+      deleteFolderDialog: {
+        shown: false,
+        deleting: false,
+        completed: false,
+        error: null,
+        folderTitle: '',
+        folderPath: '',
+        folderLocale: '',
+        progress: 0,
+        currentFile: '',
+        totalCount: 0,
+        deletedCount: 0,
+        failedCount: 0
+      }
     }
   },
   computed: {
@@ -407,19 +510,155 @@ export default {
         return
       }
       
-      this.sortLoading = true
+      // Reset dialog state
+      this.deleteFolderDialog = {
+        shown: true,
+        deleting: true,
+        completed: false,
+        error: null,
+        folderTitle: folder.title,
+        folderPath: folder.path,
+        folderLocale: folder.locale || this.activeLocale,
+        progress: 0,
+        currentFile: '',
+        totalCount: 0,
+        deletedCount: 0,
+        failedCount: 0
+      }
+      
       try {
-        const resp = await this.$apollo.mutate({
-          mutation: deleteFolderMutation,
+        // Step 1: Get all pages in the folder
+        const pagesResp = await this.$apollo.query({
+          query: getFolderPagesQuery,
           variables: {
             path: folder.path,
             locale: folder.locale || this.activeLocale
+          },
+          fetchPolicy: 'network-only'
+        })
+        
+        const pages = pagesResp.data.pages.folderPages || []
+        
+        if (pages.length === 0) {
+          throw new Error('文件夹中没有找到页面')
+        }
+        
+        this.deleteFolderDialog.totalCount = pages.length
+        
+        // Step 2: Delete pages one by one
+        for (let i = 0; i < pages.length; i++) {
+          const page = pages[i]
+          this.deleteFolderDialog.currentFile = page.path
+          
+          try {
+            const deleteResp = await this.$apollo.mutate({
+              mutation: deletePageMutation,
+              variables: {
+                id: page.id
+              }
+            })
+            
+            if (deleteResp.data.pages.delete.responseResult.succeeded) {
+              this.deleteFolderDialog.deletedCount++
+            } else {
+              this.deleteFolderDialog.failedCount++
+            }
+          } catch (err) {
+            console.error(`Failed to delete page ${page.path}:`, err)
+            this.deleteFolderDialog.failedCount++
+          }
+          
+          // Update progress
+          this.deleteFolderDialog.progress = Math.round(((i + 1) / pages.length) * 100)
+        }
+        
+        // Step 3: Rebuild tree
+        await this.$apollo.mutate({
+          mutation: gql`
+            mutation {
+              pages {
+                rebuildTree {
+                  responseResult {
+                    succeeded
+                    message
+                  }
+                }
+              }
+            }
+          `
+        })
+        
+        this.deleteFolderDialog.deleting = false
+        this.deleteFolderDialog.completed = true
+        this.deleteFolderDialog.currentFile = ''
+        
+        this.$store.commit('showNotification', {
+          message: `成功删除 ${this.deleteFolderDialog.deletedCount} 个文件`,
+          style: 'success',
+          icon: 'check'
+        })
+        
+        // Refresh the current view
+        this.fetchBrowseItems(this.currentParent, true)
+      } catch (err) {
+        console.error(err)
+        this.deleteFolderDialog.error = err.message
+        this.deleteFolderDialog.deleting = false
+        this.$store.commit('showNotification', {
+          message: `删除失败: ${err.message}`,
+          style: 'error',
+          icon: 'alert'
+        })
+      }
+    },
+    closeDeletionDialog () {
+      this.deleteFolderDialog.shown = false
+      // Reset after a delay
+      setTimeout(() => {
+        this.deleteFolderDialog = {
+          shown: false,
+          deleting: false,
+          completed: false,
+          error: null,
+          folderTitle: '',
+          folderPath: '',
+          folderLocale: '',
+          progress: 0,
+          currentFile: '',
+          totalCount: 0,
+          deletedCount: 0,
+          failedCount: 0
+        }
+      }, 300)
+    },
+    async renameFolder (folder) {
+      const newTitle = prompt(
+        `请输入新的文件夹名称:`,
+        folder.title
+      )
+      
+      if (!newTitle || newTitle.trim() === '') {
+        return
+      }
+      
+      if (newTitle === folder.title) {
+        return
+      }
+      
+      this.sortLoading = true
+      try {
+        const resp = await this.$apollo.mutate({
+          mutation: renameFolderMutation,
+          variables: {
+            path: folder.path,
+            locale: folder.locale || this.activeLocale,
+            newTitle: newTitle.trim()
           }
         })
         
-        if (resp.data.pages.deleteFolder.responseResult.succeeded) {
+        if (resp.data.pages.renameFolder.responseResult.succeeded) {
           this.$store.commit('showNotification', {
-            message: resp.data.pages.deleteFolder.responseResult.message || '文件夹已删除',
+            message: resp.data.pages.renameFolder.responseResult.message || '文件夹已重命名',
             style: 'success',
             icon: 'check'
           })
@@ -427,12 +666,12 @@ export default {
           // Refresh the current view
           this.fetchBrowseItems(this.currentParent, true)
         } else {
-          throw new Error(resp.data.pages.deleteFolder.responseResult.message)
+          throw new Error(resp.data.pages.renameFolder.responseResult.message)
         }
       } catch (err) {
         console.error(err)
         this.$store.commit('showNotification', {
-          message: `删除失败: ${err.message}`,
+          message: `重命名失败: ${err.message}`,
           style: 'error',
           icon: 'alert'
         })
@@ -531,5 +770,14 @@ export default {
 
 .nav-sidebar__handle:active {
   cursor: grabbing;
+}
+
+.nav-sidebar__folder-action {
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.nav-sidebar__folder-item:hover .nav-sidebar__folder-action {
+  opacity: 1;
 }
 </style>

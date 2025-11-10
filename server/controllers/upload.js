@@ -19,12 +19,16 @@ router.post('/u', (req, res, next) => {
     }
   }).array('mediaUpload')(req, res, next)
 }, async (req, res, next) => {
-  if (!_.some(req.user.permissions, pm => _.includes(['write:assets', 'manage:system'], pm))) {
+  // Check if user has permission to upload
+  // Allow users with write:assets, write:pages, or manage:system permissions
+  if (!WIKI.auth.checkAccess(req.user, ['write:assets', 'write:pages', 'manage:system'])) {
     return res.status(403).json({
       succeeded: false,
       message: 'You are not authorized to upload files.'
     })
-  } else if (req.files.length < 1) {
+  }
+  
+  if (req.files.length < 1) {
     return res.status(400).json({
       succeeded: false,
       message: 'Missing upload payload.'
